@@ -1,0 +1,8 @@
+pydantic
+pydantic-xml
+jinja2
+anyio
+starlette
+
+# dev
+ruff

@@ -1,0 +1,9 @@
+<html><head><title>Index of {{ route_path }}</title></head><body><h1>Index of {{ route_path }}</h1><hr/><pre>
+<a {% if route_path != "/" %}href="../"{% endif %}><u>../</u></a>{% for dir in dirs %}
+<a href="{{ dir.name }}/">{{ dir.name|truncate(50, True, '..>', 0) ~ ("/" * (dir.name|length < 50)) }}</a>{{
+            " " * (49 - dir.name|length) }} {{ dir.mtime.strftime("%d-%b-%Y %H:%M") }} {{
+            ("%19s" if exact_size else "%7s") % "-" }}{% endfor %}{% for file in files %}
+<a href="{{ file.name }}">{{ file.name|truncate(50, True, '..>', 0) }}</a>{{
+            " " * (50 - file.name|length) }} {{ file.mtime.strftime("%d-%b-%Y %H:%M") }} {{
+            ("%19s" % file.size) if exact_size else ("%7s" % file.size|filesizeformat_ex) }}{% endfor %}
+</pre><hr/></body></html>
