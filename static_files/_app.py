@@ -1,13 +1,13 @@
 from asyncio import Lock
 from datetime import UTC
 from datetime import datetime
-from functools import lru_cache
 from http import HTTPStatus
 from os import stat_result
 from pathlib import Path
 from stat import S_ISDIR
 from stat import S_ISLNK
 from typing import override
+from weakref import WeakValueDictionary
 
 from anyio.to_thread import run_sync
 from starlette._utils import get_route_path
@@ -28,7 +28,7 @@ from .responses import PydanticXMLResponse
 from .responses import TemplateResponse
 
 
-class StaticFilesEx(StaticFiles):
+class _StaticFiles(StaticFiles):
     @override
     def __init__(
         self,
@@ -41,7 +41,8 @@ class StaticFilesEx(StaticFiles):
         **kwargs,  # noqa: ANN003
     ) -> None:
         super().__init__(*args, **kwargs)
-        self._lookup_path_lock = lru_cache(lambda _: Lock())
+        self._lookup_path_lock_map_lock = Lock()
+        self._lookup_path_lock_map = WeakValueDictionary()
         self._lookup_path_cache = {}
 
         self.dotfiles = dotfiles
@@ -63,19 +64,24 @@ class StaticFilesEx(StaticFiles):
 
     @override
     async def get_response(self, path: str, scope: Scope) -> Response:
+        async with self._lookup_path_lock_map_lock:
+            try:
+                lock = self._lookup_path_lock_map[path]
+            except KeyError:
+                lock = self._lookup_path_lock_map[path] = Lock()
+
         http_exception = None
-        async with self._lookup_path_lock(path):
+        async with lock:
             try:
                 return await super().get_response(path, scope)
             except HTTPException as exception:
                 http_exception = exception
             finally:
-                lookup_path_result = self._lookup_path_cache.pop(path, None)
+                full_path, stat = self._lookup_path_cache.pop(path, ("", None))
 
-        if lookup_path_result is None or http_exception.status_code != HTTPStatus.NOT_FOUND:
+        if stat is None or http_exception.status_code != HTTPStatus.NOT_FOUND:
             raise http_exception
 
-        full_path, stat = lookup_path_result
         if self.autoindex and S_ISDIR(stat.st_mode):
             if not scope["path"].endswith("/"):
                 url = URL(scope=scope)

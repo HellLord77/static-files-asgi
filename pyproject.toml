@@ -1,6 +1,6 @@
 [project]
-name = "static-files-ex"
-version = "1.0.0"
+name = "static-files"
+version = "1.1.0"
 dependencies = [
     "pydantic",
     "pydantic-xml",
@@ -17,7 +17,7 @@ dev = [
 
 [tool.ruff]
 cache-dir = ".cache/ruff"
-src = ["static_files_ex"]
+src = ["static_files"]
 line-length = 120
 
 [tool.ruff.lint]

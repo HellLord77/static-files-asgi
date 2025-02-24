@@ -5,5 +5,5 @@
             ("%19s" if exact_size else "%7s") % "-" }}{% endfor %}{% for file in files %}
 <a href="{{ file.name }}">{{ file.name|truncate(50, True, '..>', 0) }}</a>{{
             " " * (50 - file.name|length) }} {{ file.mtime.strftime("%d-%b-%Y %H:%M") }} {{
-            ("%19s" % file.size) if exact_size else ("%7s" % file.size|filesizeformat_ex) }}{% endfor %}
+            ("%19s" % file.size) if exact_size else ("%7s" % file.size|_filesizeformat) }}{% endfor %}
 </pre><hr/></body></html>

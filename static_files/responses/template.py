@@ -5,7 +5,7 @@ from jinja2 import FileSystemLoader
 from starlette.templating import Jinja2Templates
 
 
-def do_filesizeformat_ex(value: int) -> str:
+def do__filesizeformat(value: int) -> str:
     base = 1024
     if value < base:
         return str(value)
@@ -18,6 +18,6 @@ def do_filesizeformat_ex(value: int) -> str:
 
 
 env = Environment(autoescape=True, loader=FileSystemLoader(Path(__file__).parent.parent / "templates"))
-env.filters["filesizeformat_ex"] = do_filesizeformat_ex
+env.filters["_filesizeformat"] = do__filesizeformat
 
 TemplateResponse = Jinja2Templates(env=env).TemplateResponse
