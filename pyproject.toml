@@ -1,6 +1,6 @@
 [project]
-name = "static-files"
-version = "1.1.0"
+name = "static-files-asgi"
+version = "1.1.1"
 dependencies = [
     "pydantic",
     "pydantic-xml",
@@ -17,7 +17,7 @@ dev = [
 
 [tool.ruff]
 cache-dir = ".cache/ruff"
-src = ["static_files"]
+src = ["static_files_asgi"]
 line-length = 120
 
 [tool.ruff.lint]
