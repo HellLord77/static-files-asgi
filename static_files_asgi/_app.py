@@ -1,14 +1,15 @@
-from asyncio import Lock
+from collections.abc import Awaitable
+from collections.abc import Callable
 from datetime import UTC
 from datetime import datetime
+from errno import ENAMETOOLONG
 from http import HTTPStatus
-from os import stat_result
 from pathlib import Path
 from stat import S_ISDIR
 from stat import S_ISLNK
 from typing import override
-from weakref import WeakValueDictionary
 
+from aiopath import AsyncPath
 from anyio.to_thread import run_sync
 from starlette._utils import get_route_path
 from starlette.datastructures import URL
@@ -16,6 +17,7 @@ from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
 from starlette.responses import Response
+from starlette.staticfiles import PathLike
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
@@ -38,18 +40,17 @@ class _StaticFiles(StaticFiles):
         autoindex_exact_size: bool = True,
         autoindex_localtime: bool = False,
         autoindex_format: FormatEnum = FormatEnum.HTML,
+        not_found_handler: Callable[[PathLike, Scope], Awaitable[Response]] | None = None,
         **kwargs,  # noqa: ANN003
     ) -> None:
         super().__init__(*args, **kwargs)
-        self._lookup_path_lock_map_lock = Lock()
-        self._lookup_path_lock_map = WeakValueDictionary()
-        self._lookup_path_cache = {}
 
         self.dotfiles = dotfiles
         self.autoindex = autoindex
         self.autoindex_exact_size = autoindex_exact_size
         self.autoindex_format = autoindex_format
         self.autoindex_localtime = autoindex_localtime
+        self.not_found_handler = not_found_handler
 
     @override
     def get_path(self, scope: Scope) -> str:
@@ -64,46 +65,35 @@ class _StaticFiles(StaticFiles):
 
     @override
     async def get_response(self, path: str, scope: Scope) -> Response:
-        async with self._lookup_path_lock_map_lock:
-            try:
-                lock = self._lookup_path_lock_map[path]
-            except KeyError:
-                lock = self._lookup_path_lock_map[path] = Lock()
+        try:
+            return await super().get_response(path, scope)
+        except HTTPException as exception:
+            if exception.status_code == HTTPStatus.NOT_FOUND:
+                try:
+                    full_path, stat = await run_sync(self.lookup_path, path)
+                except OSError as exception:
+                    if exception.errno == ENAMETOOLONG:
+                        raise HTTPException(HTTPStatus.NOT_FOUND) from exception
+                    raise
 
-        http_exception = None
-        async with lock:
-            try:
-                return await super().get_response(path, scope)
-            except HTTPException as exception:
-                http_exception = exception
-            finally:
-                full_path, stat = self._lookup_path_cache.pop(path, ("", None))
+                if self.autoindex and stat is not None and S_ISDIR(stat.st_mode):
+                    if not scope["path"].endswith("/"):
+                        url = URL(scope=scope)
+                        return RedirectResponse(url.replace(path=url.path + "/"))
+                    return await self.autoindex_response(full_path, scope)
 
-        if stat is None or http_exception.status_code != HTTPStatus.NOT_FOUND:
-            raise http_exception
+                if self.not_found_handler is not None:
+                    return await self.not_found_handler(full_path, scope)
+            raise
 
-        if self.autoindex and S_ISDIR(stat.st_mode):
-            if not scope["path"].endswith("/"):
-                url = URL(scope=scope)
-                return RedirectResponse(url.replace(path=url.path + "/"))
-            return await run_sync(self.autoindex_response, Path(full_path), scope)
-
-        raise http_exception
-
-    @override
-    def lookup_path(self, path: str) -> tuple[str, stat_result | None]:
-        lookup_path_result = super().lookup_path(path)
-        self._lookup_path_cache[path] = lookup_path_result
-        return lookup_path_result
-
-    def autoindex_response(self, path: Path, scope: Scope) -> Response:
+    async def autoindex_response(self, full_path: PathLike, scope: Scope) -> Response:
         directories = []
         files = []
-        for child_path in path.iterdir():
+        async for child_path in AsyncPath(full_path).iterdir():
             if not self.dotfiles and child_path.name.startswith("."):
                 continue
 
-            stat = child_path.stat()
+            stat = await child_path.stat(follow_symlinks=self.follow_symlink)
             if not self.follow_symlink and S_ISLNK(stat.st_mode):
                 continue
 

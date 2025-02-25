@@ -2,6 +2,7 @@ pydantic
 pydantic-xml
 jinja2
 anyio
+aiopath
 starlette
 
 # dev
