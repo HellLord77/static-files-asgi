@@ -76,14 +76,15 @@ class _StaticFiles(StaticFiles):
                         raise HTTPException(HTTPStatus.NOT_FOUND) from exception
                     raise
 
-                if self.autoindex and stat is not None and S_ISDIR(stat.st_mode):
+                if stat is None:
+                    if self.not_found_handler is not None:
+                        return await self.not_found_handler(path, scope)
+
+                elif self.autoindex and S_ISDIR(stat.st_mode):
                     if not scope["path"].endswith("/"):
                         url = URL(scope=scope)
                         return RedirectResponse(url.replace(path=url.path + "/"))
                     return await self.autoindex_response(full_path, scope)
-
-                if self.not_found_handler is not None:
-                    return await self.not_found_handler(full_path, scope)
             raise
 
     async def autoindex_response(self, full_path: PathLike, scope: Scope) -> Response:
