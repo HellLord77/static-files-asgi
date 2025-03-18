@@ -41,16 +41,20 @@ class _StaticFiles(StaticFiles):
         autoindex_localtime: bool = False,
         autoindex_format: FormatEnum = FormatEnum.HTML,
         not_found_handler: Callable[[PathLike, Scope], Awaitable[Response]] | None = None,
+        not_found_handler_dir: Callable[[PathLike, Scope], Awaitable[Response]] | None = None,
         **kwargs,  # noqa: ANN003
     ) -> None:
         super().__init__(*args, **kwargs)
 
         self.dotfiles = dotfiles
+
         self.autoindex = autoindex
         self.autoindex_exact_size = autoindex_exact_size
         self.autoindex_format = autoindex_format
         self.autoindex_localtime = autoindex_localtime
+
         self.not_found_handler = not_found_handler
+        self.not_found_handler_dir = not_found_handler_dir
 
     @override
     def get_path(self, scope: Scope) -> str:
@@ -79,6 +83,9 @@ class _StaticFiles(StaticFiles):
                 if stat is None:
                     if self.not_found_handler is not None:
                         return await self.not_found_handler(path, scope)
+
+                elif self.not_found_handler_dir is not None and S_ISDIR(stat.st_mode):
+                    return await self.not_found_handler_dir(path, scope)
 
                 elif self.autoindex and S_ISDIR(stat.st_mode):
                     if not scope["path"].endswith("/"):
